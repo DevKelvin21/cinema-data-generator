@@ -9,6 +9,7 @@ Este proyecto es un generador de datos para análisis de información cinematogr
 - **Python**: 3.13.3
 - **Sistema Operativo**: macOS, Linux o Windows
 - **Git**: Para control de versiones
+-**Navegador**: Tener Google Chrome instalado en tu sistema
 
 ## 🚀 Configuración del Entorno de Desarrollo
 
@@ -60,6 +61,30 @@ El proyecto utiliza las siguientes librerías principales:
 - **numpy** (2.3.1): Operaciones numéricas y arrays
 - **selenium** (4.34.2): Automatización web y scraping
 - **python-dateutil** (2.9.0.post0): Manejo avanzado de fechas
+
+## Configuración e instalación del ChromeDriver
+
+1. **Requisitos**
+    - Google Chrome instalado
+    - Conocer tu versión de Chrome:
+      -- Abre Chrome y visita: `chrome://settings/help`
+      -- Anota el número de versión (ejemplo: `139.0.7258.66`)
+
+2. **Descarga el ChromeDriver** según tu versión:
+
+    - **Para Chrome versión 114 o inferior**:
+     1. Visita: [Chromedriver downloads page](https://chromedriver.chromium.org/downloads)
+     2. Busca y descarga la versión exacta que coincida con tu Chrome
+     
+    - **Para Chrome versión 115 o superior**:
+     1. Visita: [Chrome for Testing availability dashboard](https://developer.chrome.com/docs/chromedriver/downloads/version-selection)
+     2. Si buscas las versiones más actuales, dirígete a el panel de disponibilidad de Chrome for Testing (CfT).
+     3. Descarga la versión estable que coincida con tu número de versión principal (ejemplo: para Chrome 139.x descarga ChromeDriver 139.x)
+     
+3. **Coloca el archivo**:
+   - Descarga el `chromedriver.exe` (Windows) o `chromedriver` (Linux/Mac)
+   - Colócalo en la raíz del proyecto junto los archivos .py
+   - Ahora esta todo listo para ejecutar el proyecto
 
 ## 🌊 Flujo de Trabajo con Git-Flow
 
