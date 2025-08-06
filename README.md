@@ -62,7 +62,7 @@ El proyecto utiliza las siguientes librerías principales:
 - **selenium** (4.34.2): Automatización web y scraping
 - **python-dateutil** (2.9.0.post0): Manejo avanzado de fechas
 
-## Configuración e instalación del ChromeDriver
+## Configuración del ChromeDriver
 
 1. **Requisitos**
     - Google Chrome instalado
