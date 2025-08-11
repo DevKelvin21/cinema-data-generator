@@ -112,7 +112,17 @@ def main():
         todas_funciones.extend(funciones)
     if todas_funciones:
         df = pd.DataFrame(todas_funciones)
-        df.to_excel('cinepolis_honduras.xlsx', index=False)
+        # Obtener la fecha de hoy (la primera fecha válida scrapeada)
+        fechas_ordenadas = df['Fecha de funcion'].drop_duplicates().tolist()
+        if fechas_ordenadas:
+            fecha_hoy = fechas_ordenadas[0]
+            df_hoy = df[df['Fecha de funcion'] == fecha_hoy]
+            df_otros = df[df['Fecha de funcion'] != fecha_hoy]
+            with pd.ExcelWriter('cinepolis_honduras.xlsx', engine='openpyxl') as writer:
+                df_hoy.to_excel(writer, sheet_name='Hoy', index=False)
+                df_otros.to_excel(writer, sheet_name='Otras fechas', index=False)
+        else:
+            df.to_excel('cinepolis_honduras.xlsx', index=False)
     browser.quit()
 
 if __name__ == "__main__":
