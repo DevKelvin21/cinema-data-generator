@@ -46,7 +46,15 @@ def scrapear_funciones_cine(cine_url, cine_nombre):
     for fecha in fechas:
         try:
             label = fecha.find_element(By.TAG_NAME, 'label')
-            fecha_str = label.text.strip()
+            # Obtener fecha del atributo 'for' y formatear a yyyy/mm/dd
+            for_attr = label.get_attribute('for')
+            # Esperado: field-movie-date-yyyy-mm-dd
+            import re
+            m = re.search(r'field-movie-date-(\d{4})-(\d{2})-(\d{2})', for_attr or '')
+            if m:
+                fecha_str = f"{m.group(1)}/{m.group(2)}/{m.group(3)}"
+            else:
+                fecha_str = ''
         except NoSuchElementException:
             print(f"Advertencia: No se encontró <label> en una fecha para el cine {cine_nombre}.")
             continue
@@ -67,21 +75,38 @@ def scrapear_funciones_cine(cine_url, cine_nombre):
                     partes = spans[0].text.split('|')
                     if len(partes) >= 3:
                         formato = partes[2].strip()
-                horarios = []
+                # Horarios: buscar labels dentro de ul > li
                 ul = peli.find_element(By.TAG_NAME, 'ul')
                 for li in ul.find_elements(By.TAG_NAME, 'li'):
-                    hora = li.text.strip()
-                    if hora:
-                        horarios.append(hora)
-                for hora in horarios:
-                    funciones.append({
-                        'Pais': PAIS,
-                        'Nombre del cine': cine_nombre,
-                        'Fecha de funcion': fecha_str,
-                        'hora de funcion': hora,
-                        'Nombre de la pelicula': titulo,
-                        'Formato de la pelicula': formato
-                    })
+                    try:
+                        label_hora = li.find_element(By.TAG_NAME, 'label')
+                        # El texto suelto de la hora está en label_hora, antes del span
+                        label_text = label_hora.get_attribute('innerHTML')
+                        # Extraer la hora (antes del primer <span>)
+                        import re
+                        hora_match = re.search(r'>([^<]+)<span', label_hora.get_attribute('outerHTML'))
+                        if hora_match:
+                            hora_raw = hora_match.group(1).strip()
+                        else:
+                            # fallback: solo texto del label
+                            hora_raw = label_hora.text.strip()
+                        # Formatear a tipo hora (HH:MM)
+                        from datetime import datetime
+                        try:
+                            hora_obj = datetime.strptime(hora_raw, '%H:%M').time()
+                            hora_formateada = hora_obj.strftime('%H:%M')
+                        except Exception:
+                            hora_formateada = hora_raw
+                        funciones.append({
+                            'Pais': PAIS,
+                            'Nombre del cine': cine_nombre,
+                            'Fecha de funcion': fecha_str,
+                            'hora de funcion': hora_formateada,
+                            'Nombre de la pelicula': titulo,
+                            'Formato de la pelicula': formato
+                        })
+                    except Exception:
+                        continue
             except Exception:
                 continue
     return funciones
