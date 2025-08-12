@@ -115,43 +115,11 @@ def to_yyyy_mm_dd_from_for_attr(for_attr: str) -> Optional[str]:
 # =========================
 COUNTRIES = [
     {
-        "PAIS": "Honduras",
-        "BASE_URLS": [
-            "https://cinepolis.com.hn/",
-            "https://www.cinepolis.com.hn/",
-            "http://cinepolis.com.hn/",
-        ],
-    },
-    {
-        "PAIS": "El Salvador",
-        "BASE_URLS": [
-            "https://cinepolis.com.sv/",
-            "https://www.cinepolis.com.sv/",
-            "http://cinepolis.com.sv/",
-        ],
-    },
-    {
         "PAIS": "Costa Rica",
         "BASE_URLS": [
             "https://cinepolis.co.cr/",
             "https://www.cinepolis.co.cr/",
             "http://cinepolis.co.cr/",
-        ],
-    },
-    {
-        "PAIS": "Guatemala",
-        "BASE_URLS": [
-            "https://cinepolis.com.gt/",
-            "https://www.cinepolis.com.gt/",
-            "http://cinepolis.com.gt/",
-        ],
-    },
-    {
-        "PAIS": "Panamá",
-        "BASE_URLS": [
-            "https://cinepolis.com.pa/",
-            "https://www.cinepolis.com.pa/",
-            "http://cinepolis.com.pa/",
         ],
     }
 ]
@@ -340,7 +308,7 @@ def scrapear_funciones_cine(browser: webdriver.Chrome, cine_url: str, cine_nombr
                             {
                                 "Country": pais,
                                 "Theater": cine_nombre,
-                                "Date": fecha_str,   # <- clave: fecha de la pestaña
+                                "Date": fecha_str,
                                 "Time": hora_fmt,
                                 "Movie": titulo,
                                 "Format": formato,
@@ -382,7 +350,7 @@ def main():
                 except Exception as e:
                     print(f"[{pais}] Error al scrapear {cine['nombre']}: {e}")
 
-        out_path = "cinepolis.xlsx"
+        out_path = "cinepolis_costarica.xlsx"
         cols = ["Country", "Theater", "Date", "Time", "Movie", "Format"]
 
         if todas:
@@ -399,6 +367,11 @@ def main():
                     if c not in df.columns:
                         df[c] = ""
                 df = df[cols]
+
+            # Convertir fechas a dd/mm/yyyy
+            for df in (df_today, df_other):
+                if not df.empty:
+                    df["Date"] = pd.to_datetime(df["Date"], format="%Y/%m/%d").dt.strftime("%d/%m/%Y")
 
             with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
                 df_today[cols].to_excel(writer, index=False, sheet_name="Today")
