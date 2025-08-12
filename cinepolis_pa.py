@@ -15,11 +15,10 @@ import pandas as pd
 CINEPOLIS_URL = "https://cinepolis.com.pa/"
 
 class ScraperCinepolisPanama:
-    def __init__(self, ruta_driver):
+    def __init__(self):
         """
         Inicializa el scraper con la configuración básica.
         """
-        self.ruta_driver = ruta_driver
         self.pais = "Panama"
         self.url = CINEPOLIS_URL
         self.driver = None
@@ -53,12 +52,8 @@ class ScraperCinepolisPanama:
         chrome_options.add_argument("--disable-machine-learning-model-downloader")
         chrome_options.add_argument("--log-level=3")
         chrome_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation', 'enable-cloud-services'])
-
-        # Configuración del servicio
-        servicio = Service(executable_path=self.ruta_driver)
-        
         try:
-            self.driver = webdriver.Chrome(service=servicio, options=chrome_options)
+            self.driver = webdriver.Chrome(options=chrome_options)
             self.driver.set_page_load_timeout(60)
             self.driver.set_script_timeout(30)
             print("Navegador configurado correctamente")
@@ -501,25 +496,22 @@ class ScraperCinepolisPanama:
                 return False
             
             fechas = self.obtener_fechas_disponibles()
-            
+            # Limitar a solo los primeros 7 días disponibles
+            fechas = fechas[:8]
             for fecha in fechas:
                 print(f"\nProcesando fecha: {fecha['texto']}")
-                
                 try:
                     select_fecha = WebDriverWait(self.driver, 15).until(
                         EC.presence_of_element_located((By.ID, "cmbFechas")))
                     select_fecha = Select(select_fecha)
                     select_fecha.select_by_value(fecha["value"])
                     time.sleep(2)
-                    
                     datos_peliculas = self.recolectar_datos_peliculas()
-                    
                     if datos_peliculas:
                         print(f"Encontradas {len(datos_peliculas)} funciones para esta fecha")
                         self.guardar_datos_excel(datos_peliculas, es_hoy=fecha["es_hoy"], nombre_archivo=nombre_archivo)
                     else:
                         print("No se encontraron funciones para esta fecha")
-                
                 except Exception as e:
                     print(f"Error procesando fecha {fecha['texto']}: {str(e)}")
                     continue
@@ -575,11 +567,8 @@ class ScraperCinepolisPanama:
 
 if __name__ == "__main__":
     try:
-        ruta_driver = os.path.join(os.getcwd(), "chromedriver.exe")
-        if not os.path.exists(ruta_driver):
-            raise FileNotFoundError(f"No se encontró chromedriver.exe en {ruta_driver}")
-        
-        scraper = ScraperCinepolisPanama(ruta_driver)
+        # Configurar y ejecutar el scraper (sin ruta de chromedriver, usa el default del sistema)
+        scraper = ScraperCinepolisPanama()
         nombre_archivo = scraper.ejecutar_scraping()
         print(f"\nProceso completado. Datos guardados en {nombre_archivo}")
     except Exception as e:
