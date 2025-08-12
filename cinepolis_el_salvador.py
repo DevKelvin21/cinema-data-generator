@@ -121,6 +121,7 @@ def main():
         todas_funciones.extend(funciones)
     if todas_funciones:
         df = pd.DataFrame(todas_funciones)
+        df['Fecha de funcion'] = pd.to_datetime(df['Fecha de funcion'], errors='coerce').dt.strftime('%d/%m/%Y')
         # Obtener la fecha de hoy (la primera fecha válida scrapeada)
         fechas_ordenadas = df['Fecha de funcion'].drop_duplicates().tolist()
         if fechas_ordenadas:
