@@ -340,7 +340,7 @@ def scrapear_funciones_cine(browser: webdriver.Chrome, cine_url: str, cine_nombr
                             {
                                 "Country": pais,
                                 "Theater": cine_nombre,
-                                "Date": fecha_str,   # <- clave: fecha de la pestaña
+                                "Date": fecha_str,
                                 "Time": hora_fmt,
                                 "Movie": titulo,
                                 "Format": formato,
@@ -399,6 +399,11 @@ def main():
                     if c not in df.columns:
                         df[c] = ""
                 df = df[cols]
+
+            # Convertir fechas a dd/mm/yyyy
+            for df in (df_today, df_other):
+                if not df.empty:
+                    df["Date"] = pd.to_datetime(df["Date"], format="%Y/%m/%d").dt.strftime("%d/%m/%Y")
 
             with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
                 df_today[cols].to_excel(writer, index=False, sheet_name="Today")
