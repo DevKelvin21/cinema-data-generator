@@ -33,7 +33,6 @@ class ScraperCinepolisPanama:
     def configurar_navegador(self):
         """Configura el navegador Chrome con opciones para scraping robusto."""
         chrome_options = Options()
-        
         # Configuraciones para evitar detección y mejorar rendimiento
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-notifications")
@@ -203,9 +202,11 @@ class ScraperCinepolisPanama:
     def obtener_nombre_cine_actual(self):
         """Obtiene el nombre del cine actualmente mostrado en la página."""
         try:
-            # En Panamá el nombre del cine está en un span dentro de un li con clase search-choice
+            # Obtener el segundo hijo del div con id "opcionesComplejo" y luego buscar el span dentro
             cine_element = WebDriverWait(self.driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".chosen-choices .search-choice span")))
+                EC.presence_of_element_located((By.CSS_SELECTOR, 
+                "#opcionesComplejo > div:nth-child(2) .chosen-container .chosen-choices .search-choice span")))
+            print(f"Nombre del cine actual: {cine_element.text}")
             return cine_element.text
         except (NoSuchElementException, TimeoutException):
             return ""
@@ -390,6 +391,7 @@ class ScraperCinepolisPanama:
     def extraer_datos_pelicula(self, pelicula, fecha_value, fecha_texto):
         """Extrae datos de una sola película."""
         try:
+            # nombre = pelicula.find_element(By.CSS_SELECTOR, "h3 > .datalayer-movie").text
             nombre = pelicula.find_element(By.CSS_SELECTOR, "h3 a.datalayer-movie").text
             formatos = pelicula.find_elements(By.CSS_SELECTOR, ".horarioExp")
             datos = []
@@ -425,7 +427,7 @@ class ScraperCinepolisPanama:
             fecha_simple = fecha_texto.split("(")[-1].replace(")", "") if "(" in fecha_texto else fecha_texto
             
             time.sleep(2)
-            peliculas = self.driver.find_elements(By.CSS_SELECTOR, ".tituloPelicula")
+            peliculas = self.driver.find_elements(By.CSS_SELECTOR, "article.tituloPelicula")
             
             todos_datos = []
             for pelicula in peliculas:
@@ -579,8 +581,6 @@ if __name__ == "__main__":
         
         scraper = ScraperCinepolisPanama(ruta_driver)
         nombre_archivo = scraper.ejecutar_scraping()
-        
         print(f"\nProceso completado. Datos guardados en {nombre_archivo}")
-        
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
