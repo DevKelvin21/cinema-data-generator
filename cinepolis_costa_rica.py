@@ -40,7 +40,7 @@ def scrapear_funciones_cine(cine_url, cine_nombre):
     funciones = []
     # Fechas
     fechas = browser.find_elements(By.CLASS_NAME, 'movie-date')
-    fechas = fechas[1:3]  # Solo hoy y mañana
+    fechas = fechas[1:]  # Todas las fechas disponibles excepto la primera
     for fecha in fechas:
         try:
             label = fecha.find_element(By.TAG_NAME, 'label')
@@ -117,7 +117,9 @@ def main():
         if fechas_ordenadas:
             fecha_hoy = fechas_ordenadas[0]
             df_hoy = df[df['Fecha de funcion'] == fecha_hoy]
-            df_otros = df[df['Fecha de funcion'] != fecha_hoy]
+            # Limitar a solo los próximos 7 días (excluyendo hoy)
+            fechas_siguientes = [f for f in fechas_ordenadas if f != fecha_hoy][:7]
+            df_otros = df[df['Fecha de funcion'].isin(fechas_siguientes)]
             with pd.ExcelWriter('cinepolis_costa_rica.xlsx', engine='openpyxl') as writer:
                 df_hoy.to_excel(writer, sheet_name='Hoy', index=False)
                 df_otros.to_excel(writer, sheet_name='Otras fechas', index=False)

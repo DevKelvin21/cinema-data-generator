@@ -14,11 +14,10 @@ import pandas as pd
 CINEPOLIS_URL = "https://cinepolis.com.gt/"
 
 class ScraperCinepolisGuatemala:
-    def __init__(self, ruta_driver):
+    def __init__(self):
         """
         Inicializa el scraper con la configuración básica.
         """
-        self.ruta_driver = ruta_driver
         self.pais = "Guatemala"
         self.url = CINEPOLIS_URL
         self.driver = None
@@ -31,7 +30,6 @@ class ScraperCinepolisGuatemala:
     def configurar_navegador(self):
         """Configura el navegador Chrome con opciones para scraping robusto."""
         chrome_options = Options()
-        
         # Configuraciones para evitar detección y mejorar rendimiento
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-notifications")
@@ -52,12 +50,8 @@ class ScraperCinepolisGuatemala:
         chrome_options.add_argument("--disable-machine-learning-model-downloader")
         chrome_options.add_argument("--log-level=3")
         chrome_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation', 'enable-cloud-services'])
-
-        # Configuración del servicio
-        servicio = Service(executable_path=self.ruta_driver)
-        
         try:
-            self.driver = webdriver.Chrome(service=servicio, options=chrome_options)
+            self.driver = webdriver.Chrome(options=chrome_options)
             self.driver.set_page_load_timeout(60)
             self.driver.set_script_timeout(30)
             print("Navegador configurado correctamente")
@@ -383,21 +377,16 @@ class ScraperCinepolisGuatemala:
             return False
     
     def procesar_cine(self, ciudad, cine, nombre_archivo):
-        """Procesa un cine específico, obteniendo datos de todas las fechas disponibles."""
+        """Procesa un cine específico, obteniendo datos solo de hoy y las siguientes 7 fechas."""
         try:
             print(f"\nPROCESANDO CINE: {cine['nombre']}")
-            
             if not self.seleccionar_ciudad_y_cine(ciudad, cine):
                 return False
-            
             time.sleep(1)
-            
             if not self.verificar_cine_correcto():
                 return False
-            
             if not self.verificar_elementos_cargados():
                 return False
-            
             # Obtener fechas disponibles
             select_fecha = Select(self.driver.find_element(By.ID, "dia"))
             fechas = []
@@ -407,24 +396,18 @@ class ScraperCinepolisGuatemala:
                     "value": option.get_attribute("value"),
                     "is_today": "Hoy" in option.text
                 })
-            
-            # Procesar cada fecha
+            # Limitar a solo la primera fecha (hoy) y las siguientes 7 fechas
+            fechas = fechas[:8]
             for fecha in fechas:
                 print(f"\nProcesando fecha: {fecha['text']}")
-                
-                # Seleccionar la fecha
                 select_fecha.select_by_value(fecha["value"])
                 time.sleep(1)
-                
-                # Recolectar datos
                 datos_peliculas = self.recolectar_datos_peliculas()
-                
                 if datos_peliculas:
                     print(f"Encontradas {len(datos_peliculas)} funciones para esta fecha")
                     self.guardar_datos_excel(datos_peliculas, es_hoy=fecha["is_today"], nombre_archivo=nombre_archivo)
                 else:
                     print("No se encontraron funciones para esta fecha")
-            
             return True
         except Exception as e:
             print(f"Error procesando cine {cine['nombre']}: {str(e)}")
@@ -479,11 +462,8 @@ if __name__ == "__main__":
         ruta_driver = os.path.join(os.getcwd(), "chromedriver.exe")
         if not os.path.exists(ruta_driver):
             raise FileNotFoundError(f"No se encontró chromedriver.exe en {ruta_driver}")
-        
         scraper = ScraperCinepolisGuatemala(ruta_driver)
         nombre_archivo = scraper.ejecutar_scraping()
-        
         print(f"\nProceso completado. Datos guardados en {nombre_archivo}")
-        
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
