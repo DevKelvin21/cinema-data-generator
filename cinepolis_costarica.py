@@ -115,43 +115,11 @@ def to_yyyy_mm_dd_from_for_attr(for_attr: str) -> Optional[str]:
 # =========================
 COUNTRIES = [
     {
-        "PAIS": "Honduras",
-        "BASE_URLS": [
-            "https://cinepolis.com.hn/",
-            "https://www.cinepolis.com.hn/",
-            "http://cinepolis.com.hn/",
-        ],
-    },
-    {
-        "PAIS": "El Salvador",
-        "BASE_URLS": [
-            "https://cinepolis.com.sv/",
-            "https://www.cinepolis.com.sv/",
-            "http://cinepolis.com.sv/",
-        ],
-    },
-    {
         "PAIS": "Costa Rica",
         "BASE_URLS": [
             "https://cinepolis.co.cr/",
             "https://www.cinepolis.co.cr/",
             "http://cinepolis.co.cr/",
-        ],
-    },
-    {
-        "PAIS": "Guatemala",
-        "BASE_URLS": [
-            "https://cinepolis.com.gt/",
-            "https://www.cinepolis.com.gt/",
-            "http://cinepolis.com.gt/",
-        ],
-    },
-    {
-        "PAIS": "Panamá",
-        "BASE_URLS": [
-            "https://cinepolis.com.pa/",
-            "https://www.cinepolis.com.pa/",
-            "http://cinepolis.com.pa/",
         ],
     }
 ]
@@ -382,7 +350,7 @@ def main():
                 except Exception as e:
                     print(f"[{pais}] Error al scrapear {cine['nombre']}: {e}")
 
-        out_path = "cinepolis.xlsx"
+        out_path = "cinepolis_costarica.xlsx"
         cols = ["Country", "Theater", "Date", "Time", "Movie", "Format"]
 
         if todas:
