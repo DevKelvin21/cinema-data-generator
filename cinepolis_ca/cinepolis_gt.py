@@ -59,7 +59,6 @@ class ScraperCinepolisGuatemala:
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.driver.set_page_load_timeout(60)
             self.driver.set_script_timeout(30)
-            print("Navegador configurado correctamente")
         except WebDriverException as e:
             raise RuntimeError(f"Error al iniciar el navegador: {str(e)}")
     
@@ -69,7 +68,6 @@ class ScraperCinepolisGuatemala:
             close_button = WebDriverWait(self.driver, 5).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "#takeover-close")))
             close_button.click()
-            print("Popup de video cerrado exitosamente")
             time.sleep(1)
             return True
         except (TimeoutException, NoSuchElementException):
@@ -87,7 +85,6 @@ class ScraperCinepolisGuatemala:
             # Cerrar popups si existen
             self.cerrar_popup_video()
             
-            print(f"Navegación a {self.url} completada")
             return True
         except Exception as e:
             print(f"Error navegando a la página principal: {str(e)}")
@@ -116,7 +113,6 @@ class ScraperCinepolisGuatemala:
             
             # Mostrar ciudades como array
             ciudades_array = [ciudad['nombre'] for ciudad in self.lista_ciudades]
-            print("\nCiudades disponibles:", ciudades_array)
             
             return True
         except Exception as e:
@@ -143,7 +139,6 @@ class ScraperCinepolisGuatemala:
             
             # Mostrar cines como array
             cines_array = [cine['nombre'] for cine in self.lista_cines]
-            print(f"\nCines disponibles en {self.ciudad_actual}:", cines_array)
             
             return True
         except Exception as e:
@@ -166,7 +161,6 @@ class ScraperCinepolisGuatemala:
             )
             return True
         except TimeoutException:
-            print(f"Timeout esperando cambio a cine: {nombre_cine_esperado}")
             return False
     
     def seleccionar_ciudad_y_cine(self, ciudad, cine):
@@ -174,7 +168,6 @@ class ScraperCinepolisGuatemala:
         try:
             # Actualizar la ciudad actual inmediatamente
             self.ciudad_actual = ciudad["nombre"]
-            print(f"\nSeleccionando ciudad: {self.ciudad_actual}")
             
             # Seleccionar ciudad
             select_ciudad = Select(self.driver.find_element(By.ID, "ciudad"))
@@ -198,10 +191,8 @@ class ScraperCinepolisGuatemala:
             WebDriverWait(self.driver, 20).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".contenido-cartelera-principal")))
             
-            print(f"\nSe seleccionó correctamente Cine: {self.cine_actual} en Ciudad: {self.ciudad_actual}")
             return True
         except StaleElementReferenceException:
-            print("Error: Elemento obsoleto al seleccionar ciudad/cine. Reintentando...")
             time.sleep(3)
             return self.seleccionar_ciudad_y_cine(ciudad, cine)
         except Exception as e:
@@ -215,14 +206,11 @@ class ScraperCinepolisGuatemala:
             cine_pagina = self.obtener_nombre_cine_actual()
             
             if not cine_pagina:
-                print("Error: No se pudo obtener el nombre del cine de la página")
                 return False
                 
             if cine_pagina != self.cine_actual:
-                print(f"Error: El cine mostrado ({cine_pagina}) no coincide con el seleccionado ({self.cine_actual})")
                 return False
             
-            print(f"Verificación exitosa: Cine correcto ({self.cine_actual})")
             return True
         except Exception as e:
             print(f"Error verificando cine correcto: {str(e)}")
@@ -239,7 +227,6 @@ class ScraperCinepolisGuatemala:
             WebDriverWait(self.driver, 15).until(
                 EC.presence_of_element_located((By.ID, "dia")))
             
-            print("Elementos dinámicos cargados correctamente")
             return True
         except Exception as e:
             print(f"Error verificando elementos cargados: {str(e)}")
@@ -267,7 +254,6 @@ class ScraperCinepolisGuatemala:
                 fechas_array.append(fecha_formateada)
             
             # Mostrar fechas como array
-            print("\nFechas disponibles:", fechas_array)
             
             return fechas
         except Exception as e:
@@ -350,7 +336,6 @@ class ScraperCinepolisGuatemala:
                     self.df_proximos = pd.DataFrame(columns=columnas)
                 self.df_proximos = pd.concat([self.df_proximos, df_datos], ignore_index=True)
             
-            print("Datos agregados al DataFrame correctamente")
             return True
         except Exception as e:
             print(f"Error guardando datos en DataFrame: {str(e)}")
@@ -359,7 +344,6 @@ class ScraperCinepolisGuatemala:
     def procesar_cine(self, ciudad, cine):
         """Procesa un cine específico, obteniendo datos solo de hoy y las siguientes 7 fechas."""
         try:
-            print(f"\nPROCESANDO CINE: {cine['nombre']}")
             if not self.seleccionar_ciudad_y_cine(ciudad, cine):
                 return False
             time.sleep(1)
@@ -379,15 +363,13 @@ class ScraperCinepolisGuatemala:
             # Limitar a solo la primera fecha (hoy) y las siguientes 7 fechas
             fechas = fechas[:8]
             for fecha in fechas:
-                print(f"\nProcesando fecha: {fecha['text']}")
                 select_fecha.select_by_value(fecha["value"])
                 time.sleep(1)
                 datos_peliculas = self.recolectar_datos_peliculas()
                 if datos_peliculas:
-                    print(f"Encontradas {len(datos_peliculas)} funciones para esta fecha")
                     self.guardar_datos_dataframe(datos_peliculas, es_hoy=fecha["is_today"])
                 else:
-                    print("No se encontraron funciones para esta fecha")
+                    pass
             return True
         except Exception as e:
             print(f"Error procesando cine {cine['nombre']}: {str(e)}")
@@ -406,8 +388,6 @@ class ScraperCinepolisGuatemala:
             
             # Procesar cada ciudad y cada cine
             for ciudad in self.lista_ciudades:
-                print(f"\nPROCESANDO CIUDAD: {ciudad['nombre']}")
-                
                 # Seleccionar la ciudad para obtener sus cines
                 select_ciudad = Select(self.driver.find_element(By.ID, "ciudad"))
                 select_ciudad.select_by_value(ciudad["value"])
@@ -422,15 +402,12 @@ class ScraperCinepolisGuatemala:
                     self.procesar_cine(ciudad, cine)
                     time.sleep(1)
             
-            print("\nProceso de scraping completado")
-            
         except Exception as e:
             print(f"Error durante el scraping: {str(e)}")
             raise
         finally:
             if self.driver:
                 self.driver.quit()
-                print("Navegador cerrado correctamente")
 
     def exponer_datos(self):
         """Expone los datos recolectados en DataFrames."""
@@ -508,5 +485,3 @@ def scrape(headless: bool = True) -> pd.DataFrame:
 # Keep the CLI runnable for standalone debugging if you want:
 if __name__ == "__main__":
     df = scrape(headless=True)
-    print(df.head())
-    print("Rows:", len(df))
