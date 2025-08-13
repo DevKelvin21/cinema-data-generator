@@ -14,7 +14,7 @@ import pandas as pd
 CINEPOLIS_URL = "https://cinepolis.com.gt/"
 
 class ScraperCinepolisGuatemala:
-    def __init__(self):
+    def __init__(self, ruta_driver):
         """
         Inicializa el scraper con la configuración básica.
         """
@@ -25,6 +25,7 @@ class ScraperCinepolisGuatemala:
         self.ciudad_actual = ""
         self.lista_ciudades = []
         self.lista_cines = []
+        self.ruta_driver = ruta_driver
         self.configurar_navegador()
         
     def configurar_navegador(self):
@@ -51,7 +52,8 @@ class ScraperCinepolisGuatemala:
         chrome_options.add_argument("--log-level=3")
         chrome_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation', 'enable-cloud-services'])
         try:
-            self.driver = webdriver.Chrome(options=chrome_options)
+            service = Service(self.ruta_driver)
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.driver.set_page_load_timeout(60)
             self.driver.set_script_timeout(30)
             print("Navegador configurado correctamente")
