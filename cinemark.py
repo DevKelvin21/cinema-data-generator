@@ -1,5 +1,6 @@
 import os
 import time
+import random
 from datetime import datetime, timezone
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -16,7 +17,7 @@ from selenium.common.exceptions import (
     WebDriverException
 )
 
-# Diccionario&lista de url y su respectivo pais
+# Diccionario de url y su respectivo pais
 PAISES_URLS = {
     "El Salvador": "https://www.cinemarkca.com/el-salvador",
     "Guatemala": "https://www.cinemarkca.com/guatemala",
@@ -30,11 +31,6 @@ class ScraperCinemarkCompleto:
     def __init__(self, ruta_driver, pais, url):
         """
         Inicializa el scraper con la configuración básica.
-        
-        Args:
-            ruta_driver (str): Ruta al ejecutable de chromedriver
-            pais (str): Nombre del país
-            url (str): URL del país en Cinemark
         """
         self.ruta_driver = ruta_driver
         self.pais = pais
@@ -42,57 +38,114 @@ class ScraperCinemarkCompleto:
         self.driver = None
         self.cine_actual = ""
         self.lista_cines = []
-        self.configurar_navegador()
+        self.configurar_navegador(headless=True)
         
-    def configurar_navegador(self):
+    def configurar_navegador(self, headless=True):
         """Configura el navegador Chrome con opciones para scraping robusto."""
         chrome_options = Options()
         
-        # Evitar deteccion, mejora rendimiento
+        # Configuración para modo headless o visible
+        if headless:
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--disable-gpu")
+        
+        # Configuración para evitar detección
         chrome_options.add_argument("--start-maximized")
         chrome_options.add_argument("--disable-notifications")
         chrome_options.add_argument("--disable-infobars")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--disable-popup-blocking")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
         
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-
-        #Configuraciones para suprimir errores o warnings
-        chrome_options.add_argument("--disable-gpu")
+        # Perfil persistente
+        profile_path = os.path.join(os.getcwd(), "chrome_profile")
+        if not os.path.exists(profile_path):
+            os.makedirs(profile_path)
+        chrome_options.add_argument(f"--user-data-dir={profile_path}")
+        
+        # User-Agent
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0",
+        ]
+        chrome_options.add_argument(f"user-agent={random.choice(user_agents)}")
+        
+        # Configuraciones para suprimir errores o warnings
         chrome_options.add_argument("--disable-direct-composition")
-        chrome_options.add_argument("--disable-features=VoiceTranscription,SpeechRecognition")
-        chrome_options.add_argument("--disable-speech-api")
-        chrome_options.add_argument("--disable-gcm")
-        chrome_options.add_argument("--disable-sync")
-        chrome_options.add_argument("--disable-machine-learning-model-downloader")
         chrome_options.add_argument("--log-level=3")
-        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation', 'enable-cloud-services'])
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
         
         # Configuracion del servicio
         servicio = Service(executable_path=self.ruta_driver)
         
         try:
             self.driver = webdriver.Chrome(service=servicio, options=chrome_options)
-            # Configurar tiempos de espera para levantar ventana
-            self.driver.set_page_load_timeout(30) # Tiempo max para cargar una pagina
-            self.driver.set_script_timeout(30)  # Tiempo max para ejecutar scripts JS que existen en la pagina web
-            print("Navegador configurado correctamente")
+            self.driver.set_page_load_timeout(30)
+            self.driver.set_script_timeout(30)
+            print("Navegador headless configurado correctamente" if headless else "Navegador configurado correctamente (visible)")
         except WebDriverException as e:
             raise RuntimeError(f"Error al iniciar el navegador: {str(e)}")
     
-    def aceptar_cookies(self):
-        """
-        Intenta aceptar las cookies si aparece el popup de anuncio.
-        Si no aparece, continua sin error.
-        """
+    def esperar_captcha(self, timeout=200):
+        """Espera a que el usuario resuelva el CAPTCHA manualmente en navegador visible,
+        luego cambia a modo headless para el resto del scraping."""
         try:
-            boton_cookies = WebDriverWait(self.driver, 5).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.modal-cookies__accept-button"))
-            )
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    EC.invisibility_of_element_located((By.ID, "challenge-widget-container")))
+                return True
+            except TimeoutException:
+                pass
+            
+            print("\n--- CAPTCHA DETECTADO ---")
+            print("Por favor resuelve el CAPTCHA en el navegador...")
+            
+            # Guardar la URL actual antes de cerrar
+            current_url = self.driver.current_url
+            
+            # Configurar navegador visible temporalmente
+            self.driver.quit()  # Cerrar la instancia actual
+            self.configurar_navegador(headless=False)  # Crear nueva instancia visible
+            
+            # Recargar la página
+            self.driver.get(current_url)
+            
+            # Esperar a que aparezca el CAPTCHA
+            WebDriverWait(self.driver, 15).until(
+                EC.presence_of_element_located((By.ID, "challenge-widget-container")))
+            
+            # Esperar interacción humana
+            print("\nPor favor resuelve el CAPTCHA en el navegador...")
+            print("Una vez resuelto, presiona ENTER en la consola para continuar...")
+            input()
+            
+            print("CAPTCHA resuelto, reiniciando navegador en modo headless...")
+            
+            # Volver a modo headless
+            current_url = self.driver.current_url
+            self.driver.quit()
+            self.configurar_navegador(headless=True)  # Reconfigura con opciones originales
+            self.driver.get(current_url)  # Recargar página con sesión persistente
+            
+            # Verificar que el CAPTCHA sigue resuelto
+            try:
+                WebDriverWait(self.driver, 10).until(
+                    EC.invisibility_of_element_located((By.ID, "challenge-widget-container")))
+                print("CAPTCHA verificado, continuando con scraping...")
+                return True
+            except TimeoutException:
+                print("Error: El CAPTCHA no se resolvió correctamente")
+                return False
+            
+        except Exception as e:
+            print(f"Error al manejar CAPTCHA: {str(e)}")
+            return False
+    
+    def aceptar_cookies(self):
+        """Intenta aceptar las cookies si aparece el popup."""
+        try:
+            boton_cookies = WebDriverWait(self.driver, 3).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.modal-cookies__accept-button")))
             boton_cookies.click()
             print("Cookies aceptadas correctamente.")
             return True
@@ -104,27 +157,16 @@ class ScraperCinemarkCompleto:
             return False
     
     def manejar_selector_cines(self):
-        """
-        Maneja el modal de selección de cines.
-        Obtiene la lista completa de cines disponibles y selecciona el primero del ddl.
-        
-        Returns:
-            bool: True si se selecciono correctamente, False si hubo error critico
-        """
+        """Maneja el modal de selección de cines y obtiene la lista completa."""
         try:
-            # Esperar a que aparezca el modal para seleccionar cines
-            WebDriverWait(self.driver, 15).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, "div.modal-theatre-select"))
-            )
+            WebDriverWait(self.driver, 10).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, "div.modal-theatre-select")))
             
-            # Obtener el dropdown de cines
-            selector_cines = WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "select.form-control"))
-            )
+            selector_cines = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "select.form-control")))
             
-            # Obtener lista de cines disponibles
-            opciones_cines = selector_cines.find_elements(By.TAG_NAME, "option")[1:] #Excluye primera opcion que es seleccionar uno
-            self.lista_cines = [opcion.text.strip() for opcion in opciones_cines] #Almacena los nombres de los cines en self.lista_cines
+            opciones_cines = selector_cines.find_elements(By.TAG_NAME, "option")[1:]
+            self.lista_cines = [opcion.text.strip() for opcion in opciones_cines]
             
             if not self.lista_cines:
                 raise ValueError("No se encontraron cines disponibles")
@@ -136,16 +178,13 @@ class ScraperCinemarkCompleto:
             selector_cines.click()
             opciones_cines[0].click()
             
-            # Habilitar y hacer click en el btn Aceptar
-            boton_aceptarmodal = WebDriverWait(self.driver, 15).until(
+            boton_aceptarmodal = WebDriverWait(self.driver, 10).until(
                     EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn-primary.next"))
                 )
             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", boton_aceptarmodal)
             boton_aceptarmodal.click()
-            print(f"Botón Aceptar clickeado, esperando a que se cierre el modal...")
 
             print(f"Cine seleccionado: {self.cine_actual}")
-            
             return True
             
         except (NoSuchElementException, TimeoutException, ValueError) as e:
@@ -155,36 +194,25 @@ class ScraperCinemarkCompleto:
             print(f"Error inesperado al manejar selector de cines: {str(e)}")
             return False
     
-    
     def cambiar_cine(self, nombre_cine):
-        """
-        Cambia a un cine especifico siguiendo el orden secuencial de la lista de cines.
-        Verifica tanto el nombre como la posicion correcta en el ddl.
-        
-        Args:
-            nombre_cine (str): Nombre exacto del cine a seleccionar
+        """Cambia a un cine específico solo si no es el cine actual."""
+        if self.cine_actual == nombre_cine:
+            return True
             
-        Returns:
-            bool: True si se cambio correctamente, False si hubo error
-        """
-        
         try:     
-            # 1 verificar que el cine existe en nuestra lista
             if nombre_cine not in self.lista_cines:
-                raise ValueError(f"Cine '{nombre_cine}' no encontrado en la lista de cines disponibles: {self.lista_cines}")
+                raise ValueError(f"Cine '{nombre_cine}' no encontrado en la lista de cines disponibles")
                 
-            # 2 cerrar cualquier modal que pueda estar interfiriendo
             self.driver.execute_script("""
                 const modals = document.querySelectorAll('.close-billboard-modal, .modal-backdrop');
                 modals.forEach(modal => {
                     if (modal) modal.click();
                 });
              """)
-            time.sleep(1)
+            time.sleep(0.5)
                 
-            # 3 abrir el selector de cines en el header
             try:
-                boton_selector = WebDriverWait(self.driver, 15).until(
+                boton_selector = WebDriverWait(self.driver, 10).until(
                    EC.element_to_be_clickable((By.CSS_SELECTOR, "header#header button.dropbtn-selector"))
                 )
                 self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", boton_selector)
@@ -192,37 +220,44 @@ class ScraperCinemarkCompleto:
             except (TimeoutException, ElementNotInteractableException):
                 raise TimeoutException("No se pudo encontrar/clickear el selector de cines")
             
-            # 4 esperar a que el modal de seleccion este completamente visible
             try:
-                 WebDriverWait(self.driver, 15).until(
+                 WebDriverWait(self.driver, 10).until(
                     EC.visibility_of_element_located((By.CSS_SELECTOR, "div.modal-theatre-select"))
                 )
             except TimeoutException:
                 raise TimeoutException("El modal de selección de cines no apareció")    
             
-            # 5 localizar el ddl de cines
-            try:
-                selector_cines = WebDriverWait(self.driver, 15).until(
-                      EC.presence_of_element_located((By.CSS_SELECTOR, "div.modal-theatre-select select.form-control"))
-                )
-            except TimeoutException:
+            # Selectores alternativos para el dropdown de cines
+            selectores_alternativos = [
+                "div.modal-theatre-select select.form-control", 
+                "div.modal-theatre-select select",               
+                "select.form-control",                           
+                "div.cinemark-select select",                    
+                "div.form-group > select"                        
+            ]
+
+            selector_cines = None
+            for selector in selectores_alternativos:
+                try:
+                    selector_cines = WebDriverWait(self.driver, 5).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                    break
+                except TimeoutException:
+                    continue
+            
+            if not selector_cines:
                 raise TimeoutException("No se encontró el dropdown de cines en el modal")
+                    
+            opciones = selector_cines.find_elements(By.TAG_NAME, "option")[1:]
+            nombres_opciones = [opcion.text.strip() for opcion in opciones]
                 
-            # 6 obtener todas las opciones disponibles (excluyendo la primera opcion que es vacia)
-            opciones = selector_cines.find_elements(By.TAG_NAME, "option")[1:]  #Excluye primera opcion (CINE del ddl)
-            nombres_opciones = [opcion.text.strip() for opcion in opciones] # Lista de nombres de cines en el ddl
-            print(f"Opciones disponibles en dropdown: {nombres_opciones}") # Imprime las opciones disponibles
-                
-             # 7 verificar que la lista de cines coincide con el dropdown
             if len(self.lista_cines) != len(nombres_opciones):
                 print("Advertencia: La cantidad de cines no coincide con las opciones del dropdown")
                 
-             # 8 encontrar la posicion del cine en la lista original
             try:
                 posicion_lista = self.lista_cines.index(nombre_cine)
                 nombre_esperado = self.lista_cines[posicion_lista]
                     
-                # Verificar que el nombre coincide con la opción en la misma posicion
                 if posicion_lista < len(nombres_opciones):
                      nombre_real = nombres_opciones[posicion_lista]
                      if nombre_esperado != nombre_real:
@@ -231,7 +266,6 @@ class ScraperCinemarkCompleto:
             except Exception as e:
                 print(f"Error al verificar posición: {str(e)}")
                 
-             # 9 seleccionar por indice (posicion + 1 para saltar opc vacia)
             indice_seleccion = posicion_lista + 1
             try:
                 self.driver.execute_script(f"""
@@ -240,11 +274,10 @@ class ScraperCinemarkCompleto:
                     const event = new Event('change', {{ bubbles: true }});
                     select.dispatchEvent(event);
                 """)
-                time.sleep(1)  # Esperar a que se aplique la seleccion
+                time.sleep(0.5)
             except WebDriverException:
                 raise WebDriverException("No se pudo seleccionar el cine en el dropdown")
             
-             # 10 verificar que la selección se aplico correctamente
             try:
                 opcion_seleccionada = selector_cines.find_elements(By.TAG_NAME, "option")[indice_seleccion]
                 if opcion_seleccionada.text.strip() != nombre_cine:
@@ -252,18 +285,15 @@ class ScraperCinemarkCompleto:
             except (NoSuchElementException, IndexError):
                 raise NoSuchElementException("No se pudo verificar la selección del cine")
                 
-            # 11 hacer click en Aceptar
-            boton_aceptar = WebDriverWait(self.driver, 15).until(
+            boton_aceptar = WebDriverWait(self.driver, 10).until(
                  EC.element_to_be_clickable((By.CSS_SELECTOR, "div.modal-theatre-select button.btn-primary.next"))
              )
             self.driver.execute_script("arguments[0].click();", boton_aceptar)
                 
-            # 12 esperar a que se cierre el modal
-            WebDriverWait(self.driver, 15).until(
+            WebDriverWait(self.driver, 10).until(
                   EC.invisibility_of_element_located((By.CSS_SELECTOR, "div.modal-theatre-select"))
             )
                 
-             # 13 verificar que el cambio se reflejo en el btn del header
             def verificar_cambio(driver):
                 try:
                        boton_header = driver.find_element(By.CSS_SELECTOR, "header#header button.dropbtn-selector")
@@ -273,60 +303,66 @@ class ScraperCinemarkCompleto:
                        return False
                 
             try:
-                WebDriverWait(self.driver, 15).until(verificar_cambio)
+                WebDriverWait(self.driver, 10).until(verificar_cambio)
             except TimeoutException:
                 raise TimeoutException("El cambio de cine no se reflejó en el header")
             
-            # 14 esperar a que cargue la nueva pag
-            WebDriverWait(self.driver, 15).until(
-                  EC.presence_of_element_located((By.CSS_SELECTOR, "div.form-group.cinemark-select > select.form-control"))
-             )
+            selectores_alternativos_post = [
+                "div.form-group.cinemark-select > select.form-control",
+                "select.form-control",
+                "div.cinemark-select select",
+                "div.form-group > select"
+            ]
+
+            for selector in selectores_alternativos_post:
+                try:
+                    WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                    break
+                except TimeoutException:
+                    continue
                 
-            # 15 actualizar estado
             self.cine_actual = nombre_cine
-            print(f"Cambio exitoso a cine: {nombre_cine}")
+            print(f"Cambio exitoso a cine...")
             return True
                 
         except (NoSuchElementException, TimeoutException, ValueError, WebDriverException) as e:
             print(f"Error crítico al cambiar a cine {nombre_cine}: {str(e)}")
             return False
-         
     
     def obtener_fechas(self):
-        """
-        Obtiene todas las fechas disponibles en el ddl.
+        """Obtiene todas las fechas disponibles en el ddl."""
         
-        Returns:
-            list: Lista de fechas disponibles o lista vacia si hay error
-        """
-        try:
-            selector_fechas = WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.form-group.cinemark-select > select.form-control"))
-            )
-            
-            fechas = [opcion.text for opcion in selector_fechas.find_elements(By.TAG_NAME, "option")][1:]
-            
-            if not fechas:
-                print("Advertencia: No se encontraron fechas disponibles")
-                return []
+        selectores_alternativos = [
+            "div.form-group.cinemark-select > select.form-control", 
+            "select.form-control",                                 
+            "div.cinemark-select select",                           
+            "div.form-group > select"                               
+        ]
+        
+        for selector in selectores_alternativos:
+            try:
+                selector_fechas = WebDriverWait(self.driver, 15).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                )
                 
-            print(f"Fechas disponibles: {fechas}")
-            return fechas
-            
-        except (NoSuchElementException, TimeoutException) as e:
-            print(f"Error al obtener fechas: {str(e)}")
-            return []
+                # Obtener opciones excluyendo la primera (FECHA)
+                opciones = selector_fechas.find_elements(By.TAG_NAME, "option")[1:]
+                fechas = [opcion.text for opcion in opciones]
+                
+                if fechas:
+                   print(f"Fechas encontradas: {len(fechas)}")
+                   return fechas
+                if not fechas:
+                    print("Advertencia: No se encontraron fechas disponibles")
+                    return []
+                
+            except (NoSuchElementException, TimeoutException) as e:
+                print(f"Error al obtener fechas: {str(e)}")
+                return []
     
     def formatear_fecha(self, fecha_str):
-        """
-        Convierte fecha de formato 'MAR. 29 JUL. 2025' a '29/07/2025'.
-        
-        Args:
-            fecha_str (str): Fecha en formato 'DIA_SEM. DIA MES. AÑO'
-            
-        Returns:
-            str: Fecha formateada como 'dd/mm/yyyy' o la original si hay error
-        """
+        """Convierte fecha de formato 'MAR. 29 JUL. 2025' a '29/07/2025'."""
         try:
             meses = {
                 'ENE.': '01', 'FEB.': '02', 'MAR.': '03', 'ABR.': '04',
@@ -334,44 +370,29 @@ class ScraperCinemarkCompleto:
                 'SEP.': '09', 'OCT.': '10', 'NOV.': '11', 'DIC.': '12'
             }
             
-            # Dividir la cadena fecha (por eje: "MAR. 29 JUL. 2025" -> ['MAR.', '29', 'JUL.', '2025'])
             partes = fecha_str.split()
             
             if len(partes) != 4:
-                return fecha_str  # Si no tiene 4 partes, retornar al original
+                return fecha_str
                 
-            dia = partes[1]  # El dia es siempre la segunda parte (ej: 29)
-            mes_abrev = partes[2]  # El mes es la tercera parte (ej: JUL.)
-            año = partes[3]  # El año es la cuarta parte
+            dia = partes[1]
+            mes_abrev = partes[2]
+            año = partes[3]
             
-            # Obtener num de mes (ej: 'JUL.' -> '07')
             mes_num = meses.get(mes_abrev, '00')
             
-            # Formatear como dd/mm/yyyy (asegurando 2 digitos para el dia)
             return f"{int(dia):02d}/{mes_num}/{año}"
             
         except Exception:
-            return fecha_str  # Si algo falla, retornar la fecha original
+            return fecha_str
     
     def formatear_hora(self, hora_str):
-        """
-        Convierte hora de formato '10:30 AM'/'2:10 PM' a formato 24h ('10:30'/'14:10').
-        
-        Args:
-            hora_str (str): Hora en formato 'HH:MM AM/PM'
-            
-        Returns:
-            str: Hora en formato 24h 'HH:MM' o la original si hay error
-        """
+        """Convierte hora de formato '10:30 AM'/'2:10 PM' a formato 24h ('10:30'/'14:10')."""
         try:
-            # Separar la parte del tiempo y el indicador AM/PM
             tiempo, periodo = hora_str.split()
-            
-            # Separar horas y minutos
             horas, minutos = tiempo.split(':')
             horas = int(horas)
             
-            # Convertir a 24h / formato horas
             if periodo == 'PM' and horas != 12:
                 horas += 12
             elif periodo == 'AM' and horas == 12:
@@ -379,142 +400,143 @@ class ScraperCinemarkCompleto:
             
             return f"{horas:02d}:{minutos}"
         except Exception:
-            return hora_str  # Si hay error, retornar la hora original
+            return hora_str
     
     def obtener_peliculas_para_fecha(self, fecha):
-        """
-        Obtiene peliculas disponibles para una fecha especifica.
-        
-        Args:
-            fecha (str): Fecha para la cual buscar películas
-            
-        Returns:
-            list: Lista de peliculas o lista vacia si hay error
-        """
+        """Obtiene peliculas disponibles para una fecha especifica."""
         try:
-            # Seleccionar la fecha
-            selector_fechas = Select(WebDriverWait(self.driver, 15).until(
+            selector_fechas = Select(WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "div.form-group.cinemark-select > select.form-control"))
             ))
             selector_fechas.select_by_visible_text(fecha)
             
-            # Esperar a que carguen las peliculas
-            time.sleep(2)  # Espera para que carguen los datos
+            time.sleep(1)
             
-            # Obtener dropdown de peliculas
-            selector_peliculas = WebDriverWait(self.driver, 15).until(
+            selector_peliculas = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//div[@id='bs-example-navbar-collapse-1']/ul/li[2]/div/select"))
             )
             
             peliculas = [opcion.text for opcion in selector_peliculas.find_elements(By.TAG_NAME, "option")][1:]
-            print(f"Películas para {fecha}: {peliculas}")
+            print(f"Procesando {fecha} - {len(peliculas)} películas encontradas")
             return peliculas
             
         except (NoSuchElementException, TimeoutException) as e:
-            print(f"No se pudieron obtener películas para {fecha}: {str(e)}")
+            print(f"No se pudieron obtener películas para {fecha}")
             return []
     
     def obtener_formatos_para_pelicula(self, fecha, pelicula):
-        """
-        Obtiene formatos disponibles para una pelicula en fecha especifica.
-        
-        Args:
-            fecha (str): Fecha de la funcion
-            pelicula (str): Nombre de la pelicula
-            
-        Returns:
-            list: Lista de formatos o lista vacia si hay error
-        """
+        """Obtiene formatos disponibles para una pelicula en fecha especifica."""
         try:
-            # Seleccionar la pelicula
-            selector_peliculas = Select(WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.XPATH, "//div[@id='bs-example-navbar-collapse-1']/ul/li[2]/div/select"))
-            ))
+            selector_peliculas = Select(WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.XPATH, "//div[@id='bs-example-navbar-collapse-1']/ul/li[2]/div/select")))
+            )
             selector_peliculas.select_by_visible_text(pelicula)
             
-            # Esperar a que carguen los formatos
-            time.sleep(2)
+            time.sleep(1)
             
-            # Obtener dropdown de formatos
-            selector_formatos = WebDriverWait(self.driver, 15).until(
+            selector_formatos = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//div[@id='bs-example-navbar-collapse-1']/ul/li[3]/div/select"))
             )
             
             formatos = [opcion.text for opcion in selector_formatos.find_elements(By.TAG_NAME, "option")][1:]
-            print(f"Formatos para {pelicula}: {formatos}")
             return formatos
             
-        except (NoSuchElementException, TimeoutException) as e:
-            print(f"No se pudieron obtener formatos para {pelicula}: {str(e)}")
+        except (NoSuchElementException, TimeoutException):
             return []
     
     def obtener_horarios_para_formato(self, fecha, pelicula, formato):
-        """
-        Obtiene horarios disponibles para un formato especifico.
-        
-        Args:
-            fecha (str): Fecha de la función
-            pelicula (str): Nombre de la película
-            formato (str): Formato seleccionado
-            
-        Returns:
-            list: Lista de horarios o lista vacia si hay error
-        """
+        """Obtiene horarios disponibles para un formato especifico."""
         try:
-            # Seleccionar el formato
-            selector_formatos = Select(WebDriverWait(self.driver, 15).until(
+            selector_formatos = Select(WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//div[@id='bs-example-navbar-collapse-1']/ul/li[3]/div/select"))
             ))
             selector_formatos.select_by_visible_text(formato)
             
-            # Esperar a que carguen los horarios
-            time.sleep(2)
+            time.sleep(0.5)
             
-            # Obtener dropdown de horarios
-            selector_horarios = WebDriverWait(self.driver, 15).until(
+            selector_horarios = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.XPATH, "//div[@id='bs-example-navbar-collapse-1']/ul/li[4]/div/select"))
             )
             
             horarios = [opcion.text for opcion in selector_horarios.find_elements(By.TAG_NAME, "option")][1:]
             horarios_formateados = [self.formatear_hora(h) for h in horarios]
-            print(f"Horarios para {formato}: {horarios_formateados}")
             return horarios_formateados
             
-        except (NoSuchElementException, TimeoutException) as e:
-            print(f"No se pudieron obtener horarios para {formato}: {str(e)}")
+        except (NoSuchElementException, TimeoutException):
             return []
     
     def recolectar_datos_para_cine(self):
         """
-        Recolecta todos los datos para el cine actual, clasificando correctamente por fecha actual.
-        
-        Returns:
-            tuple: (datos_hoy, datos_proximos) - listas de diccionarios con los datos
+        Recolecta datos para el cine actual.
+        Si hoy no está disponible, no genera datos para 'Today'.
+        Procesa hasta 7 fechas futuras.
         """
         datos_hoy = []
         datos_proximos = []
         
         try:
-            # Obtener fecha actual del sistema en formato dd/mm/yyyy
-            fecha_actual_sistema = datetime.now().strftime("%d/%m/%Y")
-            print(f"Fecha actual del sistema: {fecha_actual_sistema}")
+            hoy = datetime.now()
+            fecha_actual_sistema = hoy.strftime("%d/%m/%Y")
             
-            fechas = self.obtener_fechas()
-            if not fechas:
+            fechas_disponibles = self.obtener_fechas()
+            if not fechas_disponibles:
                 print(f"No hay fechas disponibles para {self.cine_actual}")
                 return [], []
             
-            for fecha in fechas:
+            # Convertir fechas a objetos datetime para comparación
+            fechas_con_objetos = []
+            for fecha in fechas_disponibles:
                 fecha_formateada = self.formatear_fecha(fecha)
-                print(f"\nProcesando fecha: {fecha} (Formateada: {fecha_formateada})")
+                try:
+                    dia, mes, año = fecha_formateada.split('/')
+                    fecha_obj = datetime(int(año), int(mes), int(dia))
+                    fechas_con_objetos.append((fecha, fecha_formateada, fecha_obj))
+                except:
+                    continue
+            
+            # Ordenar fechas por fecha_obj
+            fechas_con_objetos.sort(key=lambda x: x[2])
+            
+            # Seleccionar fechas a procesar (hoy si existe + hasta 7 futuras)
+            fechas_a_procesar = []
+            hoy_encontrado = False
+            
+            for fecha, fecha_formateada, fecha_obj in fechas_con_objetos:
+                if fecha_obj.date() == hoy.date():
+                    fechas_a_procesar.append((fecha, fecha_formateada, True))  # True = es hoy
+                    hoy_encontrado = True
+                elif fecha_obj.date() > hoy.date() and len(fechas_a_procesar) - int(hoy_encontrado) < 7:
+                    fechas_a_procesar.append((fecha, fecha_formateada, False))  # False = no es hoy
+            
+            if not fechas_a_procesar:
+                print("No hay fechas válidas para procesar")
+                return [], []
+            
+            if hoy_encontrado:
+                print(f"Fecha de hoy encontrada: {fecha_actual_sistema}")
+            else:
+                print("No se encontró la fecha de hoy en las disponibles")
+            
+            # Procesar cada fecha
+            for fecha, fecha_formateada, es_hoy in fechas_a_procesar:
+                print(f"\nProcesando fecha: {fecha} (Formateada: {fecha_formateada}) - {'Hoy' if es_hoy else 'Próxima'}")
                 
                 peliculas = self.obtener_peliculas_para_fecha(fecha)
+                if not peliculas:
+                    print("No hay películas para esta fecha")
+                    continue
                 
                 for pelicula in peliculas:
                     formatos = self.obtener_formatos_para_pelicula(fecha, pelicula)
+                    if not formatos:
+                        print(f"No hay formatos para {pelicula}")
+                        continue
                     
                     for formato in formatos:
                         horarios = self.obtener_horarios_para_formato(fecha, pelicula, formato)
+                        if not horarios:
+                            print(f"No hay horarios para {pelicula} - {formato}")
+                            continue
                         
                         for horario in horarios:
                             dato = {
@@ -526,8 +548,7 @@ class ScraperCinemarkCompleto:
                                 "Format": formato
                             }
                             
-                            # Clasificar segun si es la fecha actual o no
-                            if fecha_formateada == fecha_actual_sistema:
+                            if es_hoy:
                                 datos_hoy.append(dato)
                             else:
                                 datos_proximos.append(dato)
@@ -542,44 +563,49 @@ class ScraperCinemarkCompleto:
         """Función principal que ejecuta todo el proceso de scraping."""
         if not self.driver:
             print("Error: Navegador no inicializado")
-            return
+            return [], []
         
         try:
-            # Obtener y mostrar fecha actual
-            fecha_actual = datetime.now(timezone.utc).astimezone().strftime("%d/%m/%Y") #Validar que los datos scrapeados son actuales
+            fecha_actual = datetime.now(timezone.utc).astimezone().strftime("%d/%m/%Y")
             print(f"Iniciando scraping para fecha actual: {fecha_actual}")
             
-           # Paso 1: Abrir la URL principal
             print(f"Abriendo URL principal para {self.pais}...")
             self.driver.get(self.url)
             
-            # Paso 2: Manejar cookies
+            if not self.esperar_captcha():
+                print("No se resolvió el CAPTCHA, saltando este país...")
+                return [], []
+            
             print("Manejando cookies...")
             if not self.aceptar_cookies():
                 print("Advertencia: No se pudieron manejar las cookies, continuando...")
             
-            # Paso 3: Manejar seleccion inicial de cine 
             print("Seleccionando cine inicial...")
             if not self.manejar_selector_cines():
-                raise RuntimeError("No se pudo seleccionar el cine inicial - deteniendo scraping") #raise lanza error excepcion
+                raise RuntimeError("No se pudo seleccionar el cine inicial - deteniendo scraping")
             
-            # Paso 4: Recolectar datos para todos los cines
-            todos_datos_hoy = [] #Almacena funciones de hoy para todos los cines
-            todos_datos_prox = [] #Almacena funciones proximas disponibles para todos los cines
+            todos_datos_hoy = []
+            todos_datos_prox = []
+            cines_procesados = set()  # Evita procesar cines duplicados
             
             for idx, cine in enumerate(self.lista_cines):
-                if idx > 0:  # El primer cine ya esta seleccionado. Solo para cines después del primero
+                if cine in cines_procesados:
+                    print(f"\nCine {cine} ya procesado, saltando...")
+                    continue
+                    
+                if idx > 0:
                     print(f"\nCambiando a cine: {cine}")
                     if not self.cambiar_cine(cine):
                         print(f"Saltando cine {cine} debido a errores")
-                        continue # Saltar al siguiente cine si falla el cambio
+                        continue
                 
-                print(f"\nRecolectando datos para cine: {cine}")
+                print(f"\nRecolectando datos para cine...")
                 datos_hoy, datos_prox = self.recolectar_datos_para_cine()
                 
                 if datos_hoy or datos_prox:
                     todos_datos_hoy.extend(datos_hoy)
                     todos_datos_prox.extend(datos_prox)
+                    cines_procesados.add(cine) 
                     print(f"Datos recolectados para {cine}: {len(datos_hoy)} hoy, {len(datos_prox)} próximos")
                 else:
                     print(f"No se encontraron datos para {cine}")
@@ -587,7 +613,7 @@ class ScraperCinemarkCompleto:
             return todos_datos_hoy, todos_datos_prox
                 
         except Exception as e:
-            print(f"Error durante el scraping: {str(e)}") #Captura cualquier excepción/error que pueda ocurrir durante el scraping
+            print(f"Error durante el scraping: {str(e)}")
             return [], []
         finally:
             if self.driver:
@@ -597,14 +623,6 @@ class ScraperCinemarkCompleto:
 def guardar_en_excel(todos_datos_hoy, todos_datos_prox, ruta_archivo=None):
     """
     Guarda los datos en un archivo Excel con dos hojas.
-    
-    Args:
-        todos_datos_hoy (list): Datos para la fecha actual
-        todos_datos_prox (list): Datos para fechas futuras
-        ruta_archivo (str, optional): Ruta personalizada para el archivo
-        
-    Returns:
-        str: Ruta del archivo guardado
     """
     try:
         if not ruta_archivo:
