@@ -1,4 +1,4 @@
-# CODIGO MEJORADO - CINEPOLIS PANAMA SCRAPER
+from __future__ import annotations
 import os
 import time
 from datetime import datetime, date
@@ -10,7 +10,6 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException, NoSuchElementException, StaleElementReferenceException
 import pandas as pd
-from __future__ import annotations
 from typing import Optional, List
 
 # URL for Cinepolis Panama
