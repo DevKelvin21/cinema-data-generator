@@ -1,7 +1,7 @@
 # CODIGO MEJORADO - CINEPOLIS PANAMA SCRAPER
 import os
 import time
-from datetime import datetime
+from datetime import datetime, date
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -10,6 +10,8 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException, NoSuchElementException, StaleElementReferenceException
 import pandas as pd
+from __future__ import annotations
+from typing import Optional, List
 
 # URL for Cinepolis Panama
 CINEPOLIS_URL = "https://cinepolis.com.pa/"
@@ -551,11 +553,72 @@ class ScraperCinepolisPanama:
         """Expone los datos recolectados en DataFrames."""
         return self.df_hoy, self.df_proximos
 
+
+CONTRACT_COLS = ["Country", "Theater", "Date", "Time", "Movie", "Format"]
+
+def _normalize_and_combine(df_hoy: Optional[pd.DataFrame],
+                           df_prox: Optional[pd.DataFrame]) -> pd.DataFrame:
+    def _fix(df: Optional[pd.DataFrame]) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame(columns=CONTRACT_COLS)
+
+        # Map any Spanish headers (just in case) -> contract
+        cols_map = {
+            "Country": "Country",
+            "Theater": "Theater",
+            "Date": "Date",
+            "Time": "Time",
+            "Movie": "Movie",
+            "Format": "Format",
+            "Pais": "Country",
+            "Nombre del cine": "Theater",
+            "Fecha de funcion": "Date",
+            "hora de funcion": "Time",
+            "Nombre de la pelicula": "Movie",
+            "Formato de la pelicula": "Format",
+        }
+        df2 = df.rename(columns=cols_map)
+
+        # Keep only contract columns that exist
+        present = [c for c in CONTRACT_COLS if c in df2.columns]
+        df2 = df2[present].copy()
+
+        # Trim strings
+        for c in ["Country", "Theater", "Time", "Movie", "Format"]:
+            if c in df2.columns:
+                df2[c] = df2[c].astype(str).str.strip()
+
+        # Parse Date (Panamá scraper sets Date from site text like "dd/mm/yyyy" or similar)
+        if "Date" in df2.columns:
+            parsed = pd.to_datetime(df2["Date"], errors="coerce", dayfirst=True)
+            df2["Date"] = parsed.dt.date  # real date objects
+
+        # Drop rows without valid date
+        if "Date" in df2.columns:
+            df2 = df2.dropna(subset=["Date"])
+
+        # Reindex to full contract (missing cols become NaN)
+        return df2.reindex(columns=CONTRACT_COLS)
+
+    a = _fix(df_hoy)
+    b = _fix(df_prox)
+    if a.empty and b.empty:
+        return pd.DataFrame(columns=CONTRACT_COLS)
+    return pd.concat([a, b], ignore_index=True)
+
+def scrape(headless: bool = True) -> pd.DataFrame:
+    """
+    Orchestrator entrypoint for Panamá scraper.
+    Runs the existing class and returns a single DataFrame with contract columns
+    and Date as datetime.date.
+    """
+    scraper = ScraperCinepolisPanama()  # class already configures headless in configurar_navegador()
+    scraper.ejecutar_scraping()
+    df_hoy, df_proximos = scraper.exponer_datos()
+    return _normalize_and_combine(df_hoy, df_proximos)
+
+# Optional: keep CLI runnable for quick checks
 if __name__ == "__main__":
-    try:
-        # Configurar y ejecutar el scraper (sin ruta de chromedriver, usa el default del sistema)
-        scraper = ScraperCinepolisPanama()
-        scraper.ejecutar_scraping()
-        print(f"\nProceso completado. Datos almacenados en DataFrames.")
-    except Exception as e:
-        print(f"Error en la ejecución principal: {str(e)}")
+    out = scrape()
+    print(out.head())
+    print("Rows:", len(out))

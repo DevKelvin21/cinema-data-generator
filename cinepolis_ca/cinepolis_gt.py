@@ -436,14 +436,77 @@ class ScraperCinepolisGuatemala:
         """Expone los datos recolectados en DataFrames."""
         return self.df_hoy, self.df_proximos
 
+
+CONTRACT_COLS = ["Country", "Theater", "Date", "Time", "Movie", "Format"]
+
+def _resolve_chromedriver_path() -> str:
+    # Allow CHROMEDRIVER env override; else look for local exe/binary; else 'chromedriver'
+    env = os.environ.get("CHROMEDRIVER")
+    if env:
+        return env
+    exe = "chromedriver.exe" if os.name == "nt" else "chromedriver"
+    local = os.path.join(os.getcwd(), exe)
+    return local if os.path.exists(local) else exe
+
+def _normalize_and_combine(df_hoy: pd.DataFrame, df_prox: pd.DataFrame) -> pd.DataFrame:
+    def _fix(df: pd.DataFrame) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame(columns=CONTRACT_COLS)
+        # Ensure only the expected columns (your class already produces these names)
+        cols_map = {
+            "Country": "Country",
+            "Theater": "Theater",
+            "Date": "Date",
+            "Time": "Time",
+            "Movie": "Movie",
+            "Format": "Format",
+        }
+        # Some earlier versions used Spanish headers; map if needed:
+        if "Pais" in df.columns: cols_map["Pais"] = "Country"
+        if "Nombre del cine" in df.columns: cols_map["Nombre del cine"] = "Theater"
+        if "Fecha de funcion" in df.columns: cols_map["Fecha de funcion"] = "Date"
+        if "hora de funcion" in df.columns: cols_map["hora de funcion"] = "Time"
+        if "Nombre de la pelicula" in df.columns: cols_map["Nombre de la pelicula"] = "Movie"
+        if "Formato de la pelicula" in df.columns: cols_map["Formato de la pelicula"] = "Format"
+
+        df2 = df.rename(columns=cols_map)
+        df2 = df2[[c for c in CONTRACT_COLS if c in df2.columns]].copy()
+
+        # Trim strings
+        for c in ["Country", "Theater", "Time", "Movie", "Format"]:
+            if c in df2.columns:
+                df2[c] = df2[c].astype(str).str.strip()
+
+        # Convert Date "DD/MM/YYYY" (as produced by this class) -> python date
+        if "Date" in df2.columns:
+            parsed = pd.to_datetime(df2["Date"], errors="coerce", dayfirst=True)
+            df2["Date"] = parsed.dt.date
+
+        # Drop rows without valid dates
+        df2 = df2.dropna(subset=["Date"])
+        return df2
+
+    a = _fix(df_hoy)
+    b = _fix(df_prox)
+    out = pd.concat([a, b], ignore_index=True) if not a.empty or not b.empty else pd.DataFrame(columns=CONTRACT_COLS)
+    # Reorder columns
+    out = out.reindex(columns=CONTRACT_COLS)
+    return out
+
+def scrape(headless: bool = True) -> pd.DataFrame:
+    """
+    Orchestrator entrypoint for Guatemala scraper.
+    Runs the existing class, returns a single DataFrame with contract columns.
+    """
+    ruta_driver = _resolve_chromedriver_path()
+    scraper = ScraperCinepolisGuatemala(ruta_driver)
+    # Note: the class already sets headless in configurar_navegador(); we ignore `headless` here.
+    scraper.ejecutar_scraping()
+    df_hoy, df_proximos = scraper.exponer_datos()
+    return _normalize_and_combine(df_hoy, df_proximos)
+
+# Keep the CLI runnable for standalone debugging if you want:
 if __name__ == "__main__":
-    try:
-        # Configurar y ejecutar el scraper
-        ruta_driver = os.path.join(os.getcwd(), "chromedriver.exe")
-        if not os.path.exists(ruta_driver):
-            raise FileNotFoundError(f"No se encontró chromedriver.exe en {ruta_driver}")
-        scraper = ScraperCinepolisGuatemala(ruta_driver)
-        scraper.ejecutar_scraping()
-        print(f"\nProceso completado. Datos almacenados en DataFrames.")
-    except Exception as e:
-        print(f"Error en la ejecución principal: {str(e)}")
+    df = scrape(headless=True)
+    print(df.head())
+    print("Rows:", len(df))
