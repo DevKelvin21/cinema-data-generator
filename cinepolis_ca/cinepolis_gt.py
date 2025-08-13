@@ -10,6 +10,18 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException, NoSuchElementException, StaleElementReferenceException
 import pandas as pd
 
+def _first_text(el, selectors):
+    """Return el.text for the first selector that exists; else ''."""
+    from selenium.common.exceptions import NoSuchElementException
+    for sel in selectors:
+        try:
+            t = el.find_element(By.CSS_SELECTOR, sel).text.strip()
+            if t:
+                return t
+        except NoSuchElementException:
+            continue
+    return ""
+
 # URL for Cinepolis Guatemala
 CINEPOLIS_URL = "https://cinepolis.com.gt/"
 
@@ -263,35 +275,104 @@ class ScraperCinepolisGuatemala:
     def extraer_datos_pelicula(self, pelicula, fecha_value, fecha_texto):
         """Extrae datos de una sola película con formato de fecha DD/MM/YYYY."""
         try:
-            # Convertir fecha de YYYY-MM-DD a DD/MM/YYYY
+            # Fecha: YYYY-MM-DD -> DD/MM/YYYY
             fecha_obj = datetime.strptime(fecha_value, "%Y-%m-%d")
             fecha_formateada = fecha_obj.strftime("%d/%m/%Y")
-            
-            # Extraer nombre de la película
-            nombre = pelicula.find_element(By.CSS_SELECTOR, "h3").text
-            
-            # Extraer formatos y horarios
-            formatos = pelicula.find_elements(By.CSS_SELECTOR, ".formato")
+
+            # Título: probar varias opciones (el DOM cambia entre builds)
+            titulo = _first_text(pelicula, [
+                "h3",
+                "h2",
+                "header h3",
+                "header h2",
+                "a.datalayer-movie",
+                "[class*='movie'] h3",
+                "[class*='Movie'] h3",
+                "[class*='movie'] h2",
+                "[class*='Movie'] h2",
+            ])
+
+            # Formatos y horarios: conservar tu estrategia, pero con tolerancia
             datos = []
-            
-            for formato in formatos:
-                tipo_formato = formato.find_element(By.CSS_SELECTOR, ".formato-nombre").text
-                horarios = [h.text for h in formato.find_elements(By.CSS_SELECTOR, ".horas p")]
-                
+            # contenedores de formato (pueden llamarse .formato, o variar)
+            formato_containers = [
+                ".formato",
+                "[class*='formato']",
+                "[class*='Formato']",
+            ]
+            hora_selectors = [
+                ".horas p",             # tu selector original
+                "ul li label",          # fallback en otros sitios
+                ".col9 .btnhorario a",  # estilo Panamá
+                ".horarios p",
+            ]
+            nombre_formato_selectors = [
+                ".formato-nombre",
+                "[class*='formato-nombre']",
+                "[class*='Formato'] .formato-nombre",
+                ".col3 span",           # estilo Panamá (múltiples spans)
+            ]
+
+            contenedores = []
+            for sel in formato_containers:
+                contenedores = pelicula.find_elements(By.CSS_SELECTOR, sel)
+                if contenedores:
+                    break
+
+            if not contenedores:
+                # Si no hay contenedores, intentemos tratar la tarjeta como un bloque único de horarios.
+                horarios = []
+                for hsel in hora_selectors:
+                    horarios = [h.text.strip() for h in pelicula.find_elements(By.CSS_SELECTOR, hsel) if h.text.strip()]
+                    if horarios:
+                        break
+                if horarios:
+                    for hora in horarios:
+                        datos.append({
+                            "Country": self.pais,
+                            "Theater": self.cine_actual,
+                            "Date": fecha_formateada,
+                            "Time": hora,
+                            "Movie": titulo,
+                            "Format": "",  # desconocido
+                        })
+                    return datos
+                else:
+                    # No encontramos nada útil
+                    return []
+
+            # Hay contenedores de formato
+            for cont in contenedores:
+                # nombre del formato
+                tipo_formato = _first_text(cont, nombre_formato_selectors)
+                if not tipo_formato:
+                    # algunos sitios ponen el formato en múltiples spans col3
+                    spans = cont.find_elements(By.CSS_SELECTOR, ".col3 span")
+                    if spans:
+                        tipo_formato = " ".join([s.text.strip() for s in spans if s.text.strip()])
+
+                # horarios
+                horarios = []
+                for hsel in hora_selectors:
+                    horarios = [h.text.strip() for h in cont.find_elements(By.CSS_SELECTOR, hsel) if h.text.strip()]
+                    if horarios:
+                        break
+
                 for hora in horarios:
                     datos.append({
                         "Country": self.pais,
                         "Theater": self.cine_actual,
-                        "Date": fecha_formateada,  # Formato DD/MM/YYYY
+                        "Date": fecha_formateada,
                         "Time": hora,
-                        "Movie": nombre,
-                        "Format": tipo_formato
+                        "Movie": titulo,
+                        "Format": tipo_formato,
                     })
-            
+
             return datos
         except Exception as e:
             print(f"Error extrayendo datos de película: {str(e)}")
             return []
+
 
     def recolectar_datos_peliculas(self):
         """Recolecta datos de todas las películas para la fecha actual."""
@@ -301,19 +382,41 @@ class ScraperCinepolisGuatemala:
             fecha_option = fecha_selector.first_selected_option
             fecha_texto = fecha_option.text
             fecha_value = fecha_option.get_attribute("value")
-            
-            # Esperar a que carguen las películas
-            time.sleep(1)
-            
-            # Localizar todas las películas
-            peliculas = self.driver.find_elements(By.CSS_SELECTOR, ".SingleScheduleMovie__SingleScheduleComponent-sc-1n3hti2-0")
-            
+
+            # Espera a que carguen las películas DESPUÉS de cambiar la fecha.
+            # Intentar varias firmas de contenedor (React renombra clases con frecuencia).
+            card_selectors = [
+                "[class*='SingleScheduleMovie__SingleScheduleComponent']",
+                "[class*='SingleScheduleComponent']",
+                ".SingleScheduleMovie__SingleScheduleComponent-sc-1n3hti2-0",
+                "article.tituloPelicula",               # fallback tipo PA
+                ".movie-projection",                    # fallback tipo CR/SV/HN
+            ]
+            peliculas = []
+            for sel in card_selectors:
+                try:
+                    peliculas = WebDriverWait(self.driver, 8).until(
+                        EC.presence_of_all_elements_located((By.CSS_SELECTOR, sel))
+                    )
+                    if peliculas:
+                        break
+                except TimeoutException:
+                    continue
+
+            if not peliculas:
+                # último intento sin espera (por si ya estaban en DOM)
+                for sel in card_selectors:
+                    found = self.driver.find_elements(By.CSS_SELECTOR, sel)
+                    if found:
+                        peliculas = found
+                        break
+
             todos_datos = []
             for pelicula in peliculas:
                 datos_pelicula = self.extraer_datos_pelicula(pelicula, fecha_value, fecha_texto)
                 if datos_pelicula:
                     todos_datos.extend(datos_pelicula)
-            
+
             return todos_datos
         except Exception as e:
             print(f"Error recolectando datos pelicula: {str(e)}")
@@ -364,7 +467,18 @@ class ScraperCinepolisGuatemala:
             fechas = fechas[:8]
             for fecha in fechas:
                 select_fecha.select_by_value(fecha["value"])
-                time.sleep(1)
+                try:
+                    WebDriverWait(self.driver, 8).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, 
+                            "[class*='SingleScheduleMovie__SingleScheduleComponent'], \
+                            [class*='SingleScheduleComponent'], \
+                            .SingleScheduleMovie__SingleScheduleComponent-sc-1n3hti2-0, \
+                            article.tituloPelicula, \
+                            .movie-projection"
+                        ))
+                    )
+                except TimeoutException:
+                    pass
                 datos_peliculas = self.recolectar_datos_peliculas()
                 if datos_peliculas:
                     self.guardar_datos_dataframe(datos_peliculas, es_hoy=fecha["is_today"])
