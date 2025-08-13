@@ -33,9 +33,7 @@ class ScraperCinepolisPanama:
         self.intentos_fallidos = 0
         
     def configurar_navegador(self):
-        """Configura el navegador Chrome con opciones para scraping robusto."""
         chrome_options = Options()
-        # Configuraciones para evitar detección y mejorar rendimiento
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--disable-notifications")
@@ -56,6 +54,10 @@ class ScraperCinepolisPanama:
         chrome_options.add_argument("--disable-machine-learning-model-downloader")
         chrome_options.add_argument("--log-level=3")
         chrome_options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation', 'enable-cloud-services'])
+        chrome_options.add_argument("--use-gl=swiftshader")
+        chrome_options.add_argument("--use-angle=swiftshader")
+        chrome_options.add_argument("--enable-unsafe-swiftshader")
+
         try:
             self.driver = webdriver.Chrome(options=chrome_options)
             self.driver.set_page_load_timeout(60)
