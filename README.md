@@ -176,9 +176,20 @@ git commit -m "feat: agregar scraping de datos de Cinépolis"
 cinema-data-generator/
 ├── README.md
 ├── requirements.txt
-├── LICENSE
-├── cinepolis_sandbox.py
-└── venv/ (generado localmente)
+├── cinepolis.py                # Script principal 
+├── cinemark.py
+├── cinepolis_ca/               # Paquete con scrapers por país
+│   ├── __init__.py
+│   ├── base.py                  # Funciones comunes para los scrapers
+│   ├── cinepolis_gt.py
+│   ├── cinepolis_sv.py
+│   ├── cinepolis_cr.py
+│   ├── cinepolis_pa.py
+│   ├── cinepolis_hn.py
+│   └── (otros países).py
+├── chromedriver                 # Driver de Chrome (o chromedriver.exe en Windows)
+└── venv/                        # Entorno virtual (local)
+
 ```
 
 ## 🚨 Notas Importantes
