@@ -77,7 +77,7 @@ def scrapear_funciones_cine(cine_url, cine_nombre):
     funciones = []
     # Fechas
     fechas = browser.find_elements(By.CLASS_NAME, 'movie-date')
-    fechas = fechas[1:]  # Todas las fechas disponibles excepto la primera
+    fechas = fechas[1:9]  # Todas las fechas disponibles excepto la primera
     for fecha in fechas:
         try:
             label = fecha.find_element(By.TAG_NAME, 'label')
