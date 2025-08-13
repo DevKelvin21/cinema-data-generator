@@ -347,6 +347,11 @@ class ScraperCinemarkCompleto:
                     EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                 )
                 
+                # Esperar hasta que tenga más de una opción ("FECHAS")
+                WebDriverWait(self.driver, 3).until(
+                lambda d: len(selector_fechas.find_elements(By.TAG_NAME, "option")) > 1
+                )
+
                 # Obtener opciones excluyendo la primera (FECHA)
                 opciones = selector_fechas.find_elements(By.TAG_NAME, "option")[1:]
                 fechas = [opcion.text for opcion in opciones]
@@ -354,13 +359,15 @@ class ScraperCinemarkCompleto:
                 if fechas:
                    print(f"Fechas encontradas: {len(fechas)}")
                    return fechas
-                if not fechas:
+                else:
                     print("Advertencia: No se encontraron fechas disponibles")
                     return []
                 
-            except (NoSuchElementException, TimeoutException) as e:
-                print(f"Error al obtener fechas: {str(e)}")
-                return []
+            except TimeoutException:
+                print(f"Error al obtener fechas. No cargo.")
+            except NoSuchElementException:
+                print(f"Error al obtener fechas. No encontrado.")
+        return []
     
     def formatear_fecha(self, fecha_str):
         """Convierte fecha de formato 'MAR. 29 JUL. 2025' a '29/07/2025'."""
