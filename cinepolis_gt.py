@@ -333,53 +333,7 @@ class ScraperCinepolisGuatemala:
             print(f"Error recolectando datos pelicula: {str(e)}")
             return []
 
-    def crear_estructura_excel(self):
-        """Crea la estructura básica del Excel con las columnas requeridas."""
-        # Obtener fecha actual para el nombre del archivo
-        fecha_actual = datetime.now().strftime("%Y%m%d")
-        nombre_archivo = f"cinepolis_data_{fecha_actual}.xlsx"
-        
-        # Columnas exactas requeridas
-        columnas = ["Country", "Theater", "Date", "Time", "Movie", "Format"]
-        
-        df_hoy = pd.DataFrame(columns=columnas)
-        df_proximos = pd.DataFrame(columns=columnas)
-        
-        # Crear el archivo Excel con las dos hojas
-        with pd.ExcelWriter(nombre_archivo, engine='openpyxl') as writer:
-            df_hoy.to_excel(writer, sheet_name='Today', index=False)
-            df_proximos.to_excel(writer, sheet_name='Other schedules', index=False)
-        
-        print(f"\nEstructura de Excel creada correctamente en {nombre_archivo}")
-        return nombre_archivo
-    
-    def guardar_datos_excel(self, datos, es_hoy, nombre_archivo):
-        """Guarda los datos en el archivo Excel según la hoja correspondiente."""
-        try:
-            # Leer el archivo Excel existente
-            with pd.ExcelFile(nombre_archivo) as excel:
-                df_hoy = pd.read_excel(excel, sheet_name='Today')
-                df_proximos = pd.read_excel(excel, sheet_name='Other schedules')
-            
-            # Convertir a DataFrame
-            df_datos = pd.DataFrame(datos)
-            
-            # Agregar los nuevos datos
-            if es_hoy:
-                df_hoy = pd.concat([df_hoy, df_datos], ignore_index=True)
-            else:
-                df_proximos = pd.concat([df_proximos, df_datos], ignore_index=True)
-            
-            # Guardar de nuevo en el Excel
-            with pd.ExcelWriter(nombre_archivo, engine='openpyxl') as writer:
-                df_hoy.to_excel(writer, sheet_name='Today', index=False)
-                df_proximos.to_excel(writer, sheet_name='Other schedules', index=False)
-            
-            print(f"Datos guardados exitosamente en el Excel")
-            return True
-        except Exception as e:
-            print(f"Error guardando datos en Excel: {str(e)}")
-            return False
+
     
     def guardar_datos_dataframe(self, datos, es_hoy):
         """Guarda los datos en un DataFrame según si es hoy o fechas futuras."""
@@ -402,7 +356,7 @@ class ScraperCinepolisGuatemala:
             print(f"Error guardando datos en DataFrame: {str(e)}")
             return False
 
-    def procesar_cine(self, ciudad, cine, nombre_archivo):
+    def procesar_cine(self, ciudad, cine):
         """Procesa un cine específico, obteniendo datos solo de hoy y las siguientes 7 fechas."""
         try:
             print(f"\nPROCESANDO CINE: {cine['nombre']}")
@@ -431,7 +385,7 @@ class ScraperCinepolisGuatemala:
                 datos_peliculas = self.recolectar_datos_peliculas()
                 if datos_peliculas:
                     print(f"Encontradas {len(datos_peliculas)} funciones para esta fecha")
-                    self.guardar_datos_excel(datos_peliculas, es_hoy=fecha["is_today"], nombre_archivo=nombre_archivo)
+                    self.guardar_datos_dataframe(datos_peliculas, es_hoy=fecha["is_today"])
                 else:
                     print("No se encontraron funciones para esta fecha")
             return True
@@ -450,9 +404,6 @@ class ScraperCinepolisGuatemala:
             if not self.obtener_lista_ciudades():
                 raise RuntimeError("No se pudo obtener la lista de ciudades")
             
-            # Crear estructura del Excel con nombre basado en fecha actual
-            nombre_archivo = self.crear_estructura_excel()
-            
             # Procesar cada ciudad y cada cine
             for ciudad in self.lista_ciudades:
                 print(f"\nPROCESANDO CIUDAD: {ciudad['nombre']}")
@@ -468,11 +419,10 @@ class ScraperCinepolisGuatemala:
                 
                 # Procesar cada cine de esta ciudad
                 for cine in self.lista_cines:
-                    self.procesar_cine(ciudad, cine, nombre_archivo)
+                    self.procesar_cine(ciudad, cine)
                     time.sleep(1)
             
             print("\nProceso de scraping completado")
-            return nombre_archivo
             
         except Exception as e:
             print(f"Error durante el scraping: {str(e)}")
@@ -493,7 +443,7 @@ if __name__ == "__main__":
         if not os.path.exists(ruta_driver):
             raise FileNotFoundError(f"No se encontró chromedriver.exe en {ruta_driver}")
         scraper = ScraperCinepolisGuatemala(ruta_driver)
-        nombre_archivo = scraper.ejecutar_scraping()
-        print(f"\nProceso completado. Datos guardados en {nombre_archivo}")
+        scraper.ejecutar_scraping()
+        print(f"\nProceso completado. Datos almacenados en DataFrames.")
     except Exception as e:
         print(f"Error en la ejecución principal: {str(e)}")
