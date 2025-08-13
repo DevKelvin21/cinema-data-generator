@@ -26,6 +26,8 @@ class ScraperCinepolisGuatemala:
         self.lista_ciudades = []
         self.lista_cines = []
         self.ruta_driver = ruta_driver
+        self.df_hoy = pd.DataFrame()
+        self.df_proximos = pd.DataFrame()
         self.configurar_navegador()
         
     def configurar_navegador(self):
@@ -379,6 +381,27 @@ class ScraperCinepolisGuatemala:
             print(f"Error guardando datos en Excel: {str(e)}")
             return False
     
+    def guardar_datos_dataframe(self, datos, es_hoy):
+        """Guarda los datos en un DataFrame según si es hoy o fechas futuras."""
+        try:
+            columnas = ["Country", "Theater", "Date", "Time", "Movie", "Format"]
+            df_datos = pd.DataFrame(datos, columns=columnas)
+            
+            if es_hoy:
+                if not hasattr(self, 'df_hoy'):
+                    self.df_hoy = pd.DataFrame(columns=columnas)
+                self.df_hoy = pd.concat([self.df_hoy, df_datos], ignore_index=True)
+            else:
+                if not hasattr(self, 'df_proximos'):
+                    self.df_proximos = pd.DataFrame(columns=columnas)
+                self.df_proximos = pd.concat([self.df_proximos, df_datos], ignore_index=True)
+            
+            print("Datos agregados al DataFrame correctamente")
+            return True
+        except Exception as e:
+            print(f"Error guardando datos en DataFrame: {str(e)}")
+            return False
+
     def procesar_cine(self, ciudad, cine, nombre_archivo):
         """Procesa un cine específico, obteniendo datos solo de hoy y las siguientes 7 fechas."""
         try:
@@ -458,6 +481,10 @@ class ScraperCinepolisGuatemala:
             if self.driver:
                 self.driver.quit()
                 print("Navegador cerrado correctamente")
+
+    def exponer_datos(self):
+        """Expone los datos recolectados en DataFrames."""
+        return self.df_hoy, self.df_proximos
 
 if __name__ == "__main__":
     try:

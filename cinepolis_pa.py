@@ -26,6 +26,8 @@ class ScraperCinepolisPanama:
         self.ciudad_actual = ""
         self.lista_ciudades = []
         self.lista_cines = []
+        self.df_hoy = pd.DataFrame()
+        self.df_proximos = pd.DataFrame()
         self.configurar_navegador()
         self.intentos_fallidos = 0
         
@@ -477,6 +479,27 @@ class ScraperCinepolisPanama:
             print(f"Error guardando datos en Excel: {str(e)}")
             return False
     
+    def guardar_datos_dataframe(self, datos, es_hoy):
+        """Guarda los datos en un DataFrame según si es hoy o fechas futuras."""
+        try:
+            columnas = ["Country", "Theater", "Date", "Time", "Movie", "Format"]
+            df_datos = pd.DataFrame(datos, columns=columnas)
+            
+            if es_hoy:
+                if not hasattr(self, 'df_hoy'):
+                    self.df_hoy = pd.DataFrame(columns=columnas)
+                self.df_hoy = pd.concat([self.df_hoy, df_datos], ignore_index=True)
+            else:
+                if not hasattr(self, 'df_proximos'):
+                    self.df_proximos = pd.DataFrame(columns=columnas)
+                self.df_proximos = pd.concat([self.df_proximos, df_datos], ignore_index=True)
+            
+            print("Datos agregados al DataFrame correctamente")
+            return True
+        except Exception as e:
+            print(f"Error guardando datos en DataFrame: {str(e)}")
+            return False
+    
     def procesar_cine(self, ciudad, cine, nombre_archivo):
         """Procesa un cine específico, obteniendo datos de todas las fechas disponibles."""
         try:
@@ -511,6 +534,7 @@ class ScraperCinepolisPanama:
                     if datos_peliculas:
                         print(f"Encontradas {len(datos_peliculas)} funciones para esta fecha")
                         self.guardar_datos_excel(datos_peliculas, es_hoy=fecha["es_hoy"], nombre_archivo=nombre_archivo)
+                        self.guardar_datos_dataframe(datos_peliculas, es_hoy=fecha["es_hoy"])
                     else:
                         print("No se encontraron funciones para esta fecha")
                 except Exception as e:
@@ -565,6 +589,10 @@ class ScraperCinepolisPanama:
             if self.driver:
                 self.driver.quit()
                 print("Navegador cerrado correctamente")
+
+    def exponer_datos(self):
+        """Expone los datos recolectados en DataFrames."""
+        return self.df_hoy, self.df_proximos
 
 if __name__ == "__main__":
     try:
